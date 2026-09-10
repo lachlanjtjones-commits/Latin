@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Perfect</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --bg: #f4f6f9;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        h1, h2 { text-align: center; color: #333; }
+
+        .hidden { display: none !important; }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover { opacity: 0.9; }
+        button.danger { background-color: var(--danger); }
+        button.secondary { background-color: #7f8c8d; }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #eef2f5;
+            margin-bottom: 8px;
+            border-radius: 6px;
+        }
+
+        .pair-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        /* Quiz Styling */
+        .prompt-card {
+            background: #f8f9fa;
+            border: 2px solid var(--primary);
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .feedback {
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .feedback.correct { background: #d4edda; color: #155724; }
+        .feedback.incorrect { background: #f8d7da; color: #721c24; }
+
+        .progress {
+            text-align: center;
+            color: #666;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- VIEW 1: MAIN MENU / LIST SELECTION -->
+    <div id="view-dashboard">
+        <h1>My Study Lists</h1>
+        <button onclick="showCreateList()">+ Create New List</button>
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+        <div id="lists-container"></div>
+    </div>
+
+    <!-- VIEW 2: CREATE NEW LIST -->
+    <div id="view-create" class="hidden">
+        <h2>Create New List</h2>
+        <input type="text" id="list-title" placeholder="List Title (e.g., French Vocab, Science Ch. 1)">
+        <p><small>Enter prompt (question/word) on the left and answer on the right:</small></p>
+        
+        <div id="pairs-container">
+            <div class="pair-input">
+                <input type="text" placeholder="Question / Term" class="prompt">
+                <input type="text" placeholder="Answer / Definition" class="answer">
+            </div>
+        </div>
+        
+        <button type="button" class="secondary" onclick="addPairField()">+ Add Another Pair</button>
+        <br><br>
+        <button onclick="saveList()">Save List</button>
+        <button class="secondary" onclick="showDashboard()">Cancel</button>
+    </div>
+
+    <!-- VIEW 3: QUIZ / PRACTICE -->
+    <div id="view-quiz" class="hidden">
+        <div class="progress" id="quiz-progress">Question 1 of 10</div>
+        <div class="prompt-card" id="quiz-prompt">Term</div>
+
+        <form id="quiz-form" onsubmit="submitAnswer(event)">
+            <input type="text" id="user-answer" placeholder="Type your answer here..." autocomplete="off" autofocus>
+            <button type="submit" id="submit-btn">Check Answer</button>
+        </form>
+
+        <div id="feedback" class="feedback hidden"></div>
+        <button id="next-btn" class="hidden" onclick="nextQuestion()">Next Question</button>
+        <button class="secondary" onclick="showDashboard()" style="margin-top: 20px; display: block;">Exit Quiz</button>
+    </div>
+</div>
+
+<script>
+    // State Variables
+    let lists = JSON.parse(localStorage.getItem('study_lists')) || [];
+    let currentQuiz = {
+        items: [],
+        currentIndex: 0,
+        score: 0
+    };
+
+    // Load Lists on Start
+    renderLists();
+
+    // Navigation Helpers
+    function showDashboard() {
+        hideAllViews();
+        document.getElementById('view-dashboard').classList.remove('hidden');
+        renderLists();
+    }
+
+    function showCreateList() {
+        hideAllViews();
+        document.getElementById('view-create').classList.remove('hidden');
+        document.getElementById('list-title').value = '';
+        document.getElementById('pairs-container').innerHTML = `
+            <div class="pair-input">
+                <input type="text" placeholder="Question / Term" class="prompt">
+                <input type="text" placeholder="Answer / Definition" class="answer">
+            </div>`;
+    }
+
+    function hideAllViews() {
+        document.getElementById('view-dashboard').classList.add('hidden');
+        document.getElementById('view-create').classList.add('hidden');
+        document.getElementById('view-quiz').classList.add('hidden');
+    }
+
+    // List Creation Functions
+    function addPairField() {
+        const container = document.getElementById('pairs-container');
+        const div = document.createElement('div');
+        div.className = 'pair-input';
+        div.innerHTML = `
+            <input type="text" placeholder="Question / Term" class="prompt">
+            <input type="text" placeholder="Answer / Definition" class="answer">
+        `;
+        container.appendChild(div);
+    }
+
+    function saveList() {
+        const title = document.getElementById('list-title').value.trim();
+        if (!title) return alert('Please enter a list title!');
+
+        const prompts = document.querySelectorAll('.prompt');
+        const answers = document.querySelectorAll('.answer');
+        const pairs = [];
+
+        for (let i = 0; i < prompts.length; i++) {
+            const p = prompts[i].value.trim();
+            const a = answers[i].value.trim();
+            if (p && a) {
+                pairs.push({ prompt: p, answer: a });
+            }
+        }
+
+        if (pairs.length === 0) return alert('Please add at least one pair!');
+
+        lists.push({ id: Date.now(), title: title, pairs: pairs });
+        localStorage.setItem('study_lists', JSON.stringify(lists));
+        showDashboard();
+    }
+
+    function deleteList(id) {
+        if (confirm('Are you sure you want to delete this list?')) {
+            lists = lists.filter(l => l.id !== id);
+            localStorage.setItem('study_lists', JSON.stringify(lists));
+            renderLists();
+        }
+    }
+
+    function renderLists() {
+        const container = document.getElementById('lists-container');
+        container.innerHTML = '';
+        if (lists.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">No lists created yet. Click above to make one!</p>';
+            return;
+        }
+
+        lists.forEach(list => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div>
+                    <strong>${list.title}</strong> 
+                    <span style="color:#666; font-size:12px;">(${list.pairs.length} items)</span>
+                </div>
+                <div>
+                    <button onclick="startQuiz(${list.id})">Practice</button>
+                    <button class="danger" onclick="deleteList(${list.id})">Delete</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    // Quiz Functions
+    function startQuiz(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (!list || list.pairs.length === 0) return;
+
+        // Shuffle items (Fisher-Yates Shuffle Algorithm)
+        let shuffled = [...list.pairs];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        currentQuiz = {
+            items: shuffled,
+            currentIndex: 0,
+            score: 0
+        };
+
+        hideAllViews();
+        document.getElementById('view-quiz').classList.remove('hidden');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        const item = currentQuiz.items[currentQuiz.currentIndex];
+        document.getElementById('quiz-progress').innerText = 
+            `Question ${currentQuiz.currentIndex + 1} of ${currentQuiz.items.length}`;
+        document.getElementById('quiz-prompt').innerText = item.prompt;
+        
+        const input = document.getElementById('user-answer');
+        input.value = '';
+        input.disabled = false;
+        input.focus();
+
+        document.getElementById('feedback').className = 'feedback hidden';
+        document.getElementById('submit-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+    }
+
+    function submitAnswer(e) {
+        e.preventDefault();
+        const input = document.getElementById('user-answer');
+        const userAnswer = input.value.trim();
+        const item = currentQuiz.items[currentQuiz.currentIndex];
+        const feedback = document.getElementById('feedback');
+
+        if (!userAnswer) return;
+
+        input.disabled = true;
+        document.getElementById('submit-btn').classList.add('hidden');
+        document.getElementById('next-btn').classList.remove('hidden');
+
+        // Simple case-insensitive comparison
+        const isCorrect = userAnswer.toLowerCase() === item.answer.toLowerCase();
+
+        feedback.classList.remove('hidden');
+        if (isCorrect) {
+            currentQuiz.score++;
+            feedback.className = 'feedback correct';
+            feedback.innerHTML = 'Correct! Great job! 🎉';
+        } else {
+            feedback.className = 'feedback incorrect';
+            feedback.innerHTML = `Incorrect! ❌<br>Correct Answer: <strong>${item.answer}</strong>`;
+        }
+    }
+
+    function nextQuestion() {
+        currentQuiz.currentIndex++;
+        if (currentQuiz.currentIndex < currentQuiz.items.length) {
+            loadQuestion();
+        } else {
+            // Quiz Complete
+            alert(`Quiz Complete!\nYour Score: ${currentQuiz.score} / ${currentQuiz.items.length}`);
+            showDashboard();
+        }
+    }
+</script>
+</body>
+</html>
